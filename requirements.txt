@@ -1,0 +1,5 @@
+qrcode[pil]>=7.4
+Pillow>=10.0
+customtkinter>=5.2
+pyinstaller>=6.0
+pyobjc-framework-Cocoa>=9.0

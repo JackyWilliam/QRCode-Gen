@@ -1,0 +1,129 @@
+name: Build
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    name: macOS (universal2)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python (universal2)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          pip install qrcode[pil] Pillow customtkinter pyinstaller pyobjc-framework-Cocoa
+          # Rebuild Pillow as universal2
+          pip uninstall pillow -y
+          ARCHFLAGS="-arch x86_64 -arch arm64" pip install --no-binary :all: pillow
+
+      - name: Get customtkinter path
+        id: ctk
+        run: echo "path=$(python -c 'import customtkinter, os; print(os.path.dirname(customtkinter.__file__))')" >> $GITHUB_OUTPUT
+
+      - name: Build .app
+        run: |
+          pyinstaller \
+            --name "QRCode Gen" \
+            --windowed \
+            --onedir \
+            --noconfirm \
+            --clean \
+            --target-arch universal2 \
+            --add-data "${{ steps.ctk.outputs.path }}:customtkinter" \
+            --add-data "Logo.png:." \
+            --add-data "i18n.py:." \
+            --add-data "qr_engine.py:." \
+            --hidden-import "PIL._tkinter_finder" \
+            --hidden-import "qrcode.image.styledpil" \
+            --hidden-import "qrcode.image.styles.moduledrawers.pil" \
+            --icon "Logo.png" \
+            app.py
+
+      - name: Patch Info.plist
+        run: |
+          APP_PLIST="dist/QRCode Gen.app/Contents/Info.plist"
+          VERSION=$(python -c "import re; print(re.search(r'VERSION\s*=\s*\"([^\"]+)\"', open('app.py').read()).group(1))")
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" "${APP_PLIST}"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${VERSION}" "${APP_PLIST}"
+          /usr/libexec/PlistBuddy -c "Add :NSHumanReadableCopyright string 'Copyright © 2026 Yijie Ding. MIT License.'" "${APP_PLIST}" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Set :NSHumanReadableCopyright 'Copyright © 2026 Yijie Ding. MIT License.'" "${APP_PLIST}"
+
+      - name: Create zip
+        run: cd dist && zip -r "QRCode Gen-mac-universal2.zip" "QRCode Gen.app" --quiet
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QRCode-Gen-macOS
+          path: dist/QRCode Gen-mac-universal2.zip
+
+  build-windows:
+    name: Windows (x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install qrcode[pil] Pillow customtkinter pyinstaller
+
+      - name: Get customtkinter path
+        id: ctk
+        run: echo "path=$(python -c 'import customtkinter, os; print(os.path.dirname(customtkinter.__file__))')" >> $env:GITHUB_OUTPUT
+
+      - name: Build .exe
+        run: |
+          pyinstaller `
+            --name "QRCode Gen" `
+            --windowed `
+            --onedir `
+            --noconfirm `
+            --clean `
+            --add-data "${{ steps.ctk.outputs.path }};customtkinter" `
+            --add-data "Logo.png;." `
+            --add-data "i18n.py;." `
+            --add-data "qr_engine.py;." `
+            --hidden-import "PIL._tkinter_finder" `
+            --hidden-import "qrcode.image.styledpil" `
+            --hidden-import "qrcode.image.styles.moduledrawers.pil" `
+            --icon "Logo.png" `
+            app.py
+
+      - name: Create zip
+        run: Compress-Archive -Path "dist\QRCode Gen" -DestinationPath "dist\QRCode Gen-windows-x64.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QRCode-Gen-Windows
+          path: dist\QRCode Gen-windows-x64.zip
+
+  release:
+    name: Create Release
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.zip
