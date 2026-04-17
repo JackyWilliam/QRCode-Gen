@@ -52,4 +52,4 @@ Requires Python 3.x from [python.org](https://www.python.org) (not Homebrew).
 
 ## License
 
-MIT License — Copyright © 2026 Yijie Ding
+MIT License
