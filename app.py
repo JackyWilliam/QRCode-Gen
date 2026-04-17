@@ -13,24 +13,27 @@ from typing import Optional
 import customtkinter as ctk
 from PIL import Image, ImageDraw, ImageTk
 
-from i18n import t
+from i18n import LANG, t
 from qr_engine import QRCodeEngine
 
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
-VERSION   = "1.0.0"
+VERSION   = "1.1.0"
 COPYRIGHT = "Copyright © 2026 Yijie Ding. MIT License."
 
 QUALITY_KEYS  = ["quality_low", "quality_medium", "quality_high", "quality_ultra"]
 QUALITY_SIZES = [6, 10, 16, 36]   # box_size 对应像素密度（超高保证最小 QR ≥1044px）
 
-STYLES     = ["square", "round", "rounded_square", "horizontal", "vertical"]
-STYLE_KEYS = ["style_square", "style_round", "style_rounded", "style_horizontal", "style_vertical"]
-STYLE_ICONS = ["▪", "●", "◼", "≡", "⋮"]
+STYLES     = ["square", "round", "rounded_square", "horizontal", "vertical", "custom"]
+STYLE_KEYS = ["style_square", "style_round", "style_rounded", "style_horizontal", "style_vertical", "style_custom"]
+STYLE_ICONS = ["▪", "●", "◼", "≡", "⋮", "✦"]
 EC_LEVELS  = ["L", "M", "Q", "H"]
 EC_DESC    = {"L": "7 %", "M": "15 %", "Q": "25 %", "H": "30 %"}
 TAB_KEYS   = ["tab_url", "tab_text", "tab_wifi", "tab_email", "tab_phone", "tab_vcard"]
+
+SIDEBAR_W     = 300 if LANG == "zh" else 340
+TAB_FONT_SIZE = 12 if LANG == "zh" else 11
 
 # 色盘 —— light / dark 自适应
 _CARD   = ("gray90",  "#2b2b2b")   # 卡片背景
@@ -279,6 +282,7 @@ class App(ctk.CTk):
 
         self._engine = QRCodeEngine()
         self._icon_path: Optional[str] = None
+        self._shape_path: Optional[str] = None
         self._current_image: Optional[Image.Image] = None
         self._debounce_id: Optional[str] = None
         self._resize_id: Optional[str] = None
@@ -343,7 +347,7 @@ class App(ctk.CTk):
 
         # ── 左侧控制栏 ────────────────────────────────────────
         sidebar = ctk.CTkScrollableFrame(
-            root, width=300, corner_radius=0,
+            root, width=SIDEBAR_W, corner_radius=0,
             fg_color=("gray92", "#242424"),
             scrollbar_button_color=("gray75", "#444"),
         )
@@ -386,6 +390,10 @@ class App(ctk.CTk):
         self._tabs.pack(fill="x", padx=16, pady=(0, 16))
         for name in tab_names:
             self._tabs.add(name)
+        try:
+            self._tabs._segmented_button.configure(font=ctk.CTkFont(size=TAB_FONT_SIZE))
+        except Exception:
+            pass
 
         oc = self._schedule_preview
         self._panels: dict[str, object] = {
@@ -398,7 +406,7 @@ class App(ctk.CTk):
         }
         for panel in self._panels.values():
             panel.pack(fill="x", padx=6, pady=6)
-        self._tabs.configure(command=lambda _: self._schedule_preview())
+        self._tabs.configure(command=lambda *_: self._schedule_preview())
 
         # ── 2. 模块样式 ───────────────────────────────────────
         self._section_label(parent, "module_style")
@@ -426,6 +434,30 @@ class App(ctk.CTk):
             btn.pack(side="left", padx=3)
             self._style_btns.append(btn)
 
+        self._shape_area = ctk.CTkFrame(style_card, fg_color="transparent")
+        shape_btn_row = ctk.CTkFrame(self._shape_area, fg_color="transparent")
+        shape_btn_row.pack(fill="x")
+        ctk.CTkButton(
+            shape_btn_row, text=t("choose_shape"),
+            height=30, corner_radius=8, font=ctk.CTkFont(size=12),
+            command=self._pick_shape,
+        ).pack(side="left")
+        ctk.CTkButton(
+            shape_btn_row, text=t("clear"),
+            width=56, height=30, corner_radius=8,
+            fg_color=("gray75", "#3a3a3a"),
+            hover_color=(_RED, _RED),
+            font=ctk.CTkFont(size=12),
+            command=self._clear_shape,
+        ).pack(side="left", padx=(6, 0))
+
+        self._shape_name_label = ctk.CTkLabel(
+            self._shape_area, text=t("shape_hint"),
+            font=ctk.CTkFont(size=11), text_color="gray", anchor="w")
+        self._shape_name_label.pack(fill="x", pady=(4, 0))
+        self._shape_thumb_label = ctk.CTkLabel(self._shape_area, text="")
+        self._shape_thumb_label.pack(pady=(2, 0))
+
         # ── 3. 颜色 ───────────────────────────────────────────
         self._section_label(parent, "colors")
         color_card = _card(parent)
@@ -438,7 +470,7 @@ class App(ctk.CTk):
         fg_bg_row = ctk.CTkFrame(color_inner, fg_color="transparent")
         fg_bg_row.pack(fill="x")
 
-        # 前景
+        # 二维码颜色
         fg_col = ctk.CTkFrame(fg_bg_row, fg_color="transparent")
         fg_col.pack(side="left", expand=True)
         ctk.CTkLabel(fg_col, text=t("fg_color"),
@@ -446,15 +478,7 @@ class App(ctk.CTk):
         self._tile_fg = ColorTile(fg_col, self._fg1, self._on_fg1_change, size=52)
         self._tile_fg.pack(pady=(4, 0))
 
-        # 背景
-        bg_col = ctk.CTkFrame(fg_bg_row, fg_color="transparent")
-        bg_col.pack(side="left", expand=True)
-        ctk.CTkLabel(bg_col, text=t("bg_color"),
-                     font=ctk.CTkFont(size=11), text_color="gray").pack()
-        self._tile_bg = ColorTile(bg_col, self._bg, self._on_bg_change, size=52)
-        self._tile_bg.pack(pady=(4, 0))
-
-        # 渐变终止色（默认隐藏）
+        # 渐变终止色（默认隐藏，紧邻二维码颜色）
         grad_col = ctk.CTkFrame(fg_bg_row, fg_color="transparent")
         grad_col.pack(side="left", expand=True)
         ctk.CTkLabel(grad_col, text=t("gradient_end"),
@@ -463,14 +487,38 @@ class App(ctk.CTk):
         self._tile_fg2.pack(pady=(4, 0))
         self._grad_col = grad_col   # 用于显示/隐藏
 
-        # 渐变开关
+        # 背景
+        bg_col = ctk.CTkFrame(fg_bg_row, fg_color="transparent")
+        bg_col.pack(side="left", expand=True)
+        ctk.CTkLabel(bg_col, text=t("bg_color"),
+                     font=ctk.CTkFont(size=11), text_color="gray").pack()
+        self._tile_bg = ColorTile(bg_col, self._bg, self._on_bg_change, size=52)
+        self._tile_bg.pack(pady=(4, 0))
+        self._bg_col = bg_col   # 用于渐变开启时 pack before 定位
+
+        # 渐变开关 —— 与上方「渐变终止色」列对齐
         grad_toggle_row = ctk.CTkFrame(color_inner, fg_color="transparent")
-        grad_toggle_row.pack(fill="x", pady=(10, 0))
+        grad_toggle_row.pack(fill="x", pady=(12, 0))
+        grad_toggle_row.columnconfigure(0, weight=1, uniform="col")
+        grad_toggle_row.columnconfigure(1, weight=1, uniform="col")
+        grad_toggle_row.columnconfigure(2, weight=1, uniform="col")
+
+        sw_wrap = ctk.CTkFrame(grad_toggle_row, fg_color="transparent")
+        sw_wrap.grid(row=0, column=1)
+
+        ctk.CTkLabel(
+            sw_wrap, text=t("gradient"),
+            font=ctk.CTkFont(size=11), text_color="gray",
+        ).pack(side="left", padx=(0, 8))
         ctk.CTkSwitch(
-            grad_toggle_row, text=t("gradient"),
+            sw_wrap, text="",
             variable=self._gradient_on,
             command=self._on_gradient_toggle,
-            font=ctk.CTkFont(size=12),
+            switch_width=40, switch_height=22,
+            progress_color="#34C759",
+            fg_color=("#D1D5DB", "#3a3a3a"),
+            button_color="white",
+            button_hover_color="white",
         ).pack(side="left")
 
         self._toggle_gradient_ui(False)
@@ -617,6 +665,7 @@ class App(ctk.CTk):
 
         self._canvas_frame = ctk.CTkFrame(wrapper, corner_radius=16, fg_color=_CARD,
                                           width=400, height=400)
+        self._canvas_frame.pack_propagate(False)
 
         self._preview_canvas = tk.Canvas(
             self._canvas_frame, bg="#18181b", highlightthickness=0)
@@ -635,6 +684,14 @@ class App(ctk.CTk):
                 fg_color=_ACCENT if selected else ("gray80", "#3a3a3a"),
                 text_color=("white" if selected else ("gray20", "gray80")),
             )
+        if val == "custom":
+            self._shape_area.pack(fill="x", padx=10, pady=(0, 10))
+            if not self._shape_path:
+                self._pick_shape()
+                return
+        else:
+            self._shape_area.pack_forget()
+        self._sync_ec_state()
         self._schedule_preview()
 
     def _on_ec(self, val: str):
@@ -675,7 +732,7 @@ class App(ctk.CTk):
 
     def _toggle_gradient_ui(self, on: bool):
         if on:
-            self._grad_col.pack(side="left", expand=True)
+            self._grad_col.pack(side="left", expand=True, before=self._bg_col)
             self._fg2 = self._tile_fg2.color
         else:
             self._grad_col.pack_forget()
@@ -709,8 +766,44 @@ class App(ctk.CTk):
         self._sync_ec_state()
         self._schedule_preview()
 
+    def _pick_shape(self):
+        path = filedialog.askopenfilename(
+            title=t("choose_shape"),
+            filetypes=[("PNG", "*.png")],
+        )
+        if not path:
+            return
+        try:
+            img = Image.open(path).convert("RGBA")
+            if img.getchannel("A").getextrema() == (255, 255):
+                messagebox.showerror(t("tip"), t("shape_invalid"))
+                return
+        except Exception as e:
+            messagebox.showerror(t("tip"), str(e))
+            return
+        self._shape_path = path
+        self._shape_name_label.configure(text=Path(path).name, text_color=("gray20", "gray80"))
+        try:
+            thumb = img.copy()
+            thumb.thumbnail((48, 48), Image.LANCZOS)
+            self._shape_thumb_photo = ImageTk.PhotoImage(thumb)
+            self._shape_thumb_label.configure(image=self._shape_thumb_photo, text="")
+        except Exception:
+            pass
+        self._sync_ec_state()
+        self._schedule_preview()
+
+    def _clear_shape(self):
+        self._shape_path = None
+        self._shape_name_label.configure(text=t("shape_hint"), text_color="gray")
+        self._shape_thumb_label.configure(image="", text="")
+        self._sync_ec_state()
+        self._schedule_preview()
+
     def _sync_ec_state(self):
-        has = bool(self._icon_path)
+        has = bool(self._icon_path) or (
+            self._style_var.get() == "custom" and bool(self._shape_path)
+        )
         for btn, lvl in zip(self._ec_btns, EC_LEVELS):
             btn.configure(state="disabled" if (has and lvl != "H") else "normal")
         if has:
@@ -737,11 +830,11 @@ class App(ctk.CTk):
     def _canvas_size(self) -> int:
         w = self._preview_canvas.winfo_width()
         h = self._preview_canvas.winfo_height()
-        return max(180, min(w, h) - 32)
+        return max(1, min(w, h) - 32)
 
     def _on_wrapper_resize(self, event):
         """让 canvas_frame 始终是正方形并居中于 wrapper。"""
-        size = max(200, min(event.width, event.height))
+        size = max(1, min(event.width, event.height))
         x = (event.width  - size) // 2
         y = (event.height - size) // 2
         self._canvas_frame.configure(width=size, height=size)
@@ -766,16 +859,21 @@ class App(ctk.CTk):
         if not data:
             self.after(0, self._set_preview_placeholder)
             return
+        style = self._style_var.get()
+        if style == "custom" and not self._shape_path:
+            self.after(0, self._show_error, t("shape_required"))
+            return
         try:
             img = self._engine.generate(
                 data=data,
-                style=self._style_var.get(),
+                style=style,
                 fg_color=self._build_fg_color(),
                 bg_color=self._bg,
                 icon_path=self._icon_path,
                 icon_size_ratio=self._icon_ratio.get(),
                 error_correction=self._ec_var.get(),
                 box_size=QUALITY_SIZES[self._quality_idx], border=4,
+                shape_path=self._shape_path,
             )
             self._current_image = img
             size = self._canvas_size()
@@ -818,8 +916,8 @@ class App(ctk.CTk):
         self._status_label.configure(text=t("preview_updated"), text_color="#4ade80")
 
     def _set_preview_placeholder(self):
-        cw = max(320, self._preview_canvas.winfo_width())
-        ch = max(320, self._preview_canvas.winfo_height())
+        cw = max(1, self._preview_canvas.winfo_width())
+        ch = max(1, self._preview_canvas.winfo_height())
         bg = Image.new("RGBA", (cw, ch), (24, 24, 27, 255))
         tk_img = ImageTk.PhotoImage(bg)
         self._preview_canvas.delete("all")

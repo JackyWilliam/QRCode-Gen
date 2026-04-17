@@ -29,9 +29,17 @@ _STRINGS: dict[str, dict[str, str]] = {
     "style_rounded":      {"zh": "圆角方块",            "en": "Rounded"},
     "style_horizontal":   {"zh": "横条",               "en": "H-Bars"},
     "style_vertical":     {"zh": "竖条",               "en": "V-Bars"},
+    "style_custom":       {"zh": "自定义",             "en": "Custom"},
+
+    # ── 自定义形状 ────────────────────────────────────────────────
+    "custom_shape":       {"zh": "自定义形状",          "en": "Custom Shape"},
+    "choose_shape":       {"zh": "选择形状 PNG",        "en": "Choose Shape PNG"},
+    "shape_hint":         {"zh": "需透明背景 PNG",       "en": "Transparent PNG only"},
+    "shape_invalid":      {"zh": "图片必须是带透明背景的 PNG", "en": "Image must be a PNG with transparent background"},
+    "shape_required":     {"zh": "请先选择自定义形状",    "en": "Please choose a custom shape first"},
 
     # ── 颜色按钮 ──────────────────────────────────────────────────
-    "fg_color":           {"zh": "前景色",             "en": "Foreground"},
+    "fg_color":           {"zh": "二维码颜色",          "en": "QR Code Color"},
     "gradient":           {"zh": "渐变色",             "en": "Gradient"},
     "gradient_end":       {"zh": "渐变终止色",          "en": "Gradient End"},
     "bg_color":           {"zh": "背景色",             "en": "Background"},

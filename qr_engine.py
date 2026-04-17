@@ -28,6 +28,8 @@ class QRCodeEngine:
         "vertical": lambda box_size: VerticalBarsDrawer(),
     }
 
+    _CUSTOM_STYLE = "custom"
+
     _ERROR_LEVELS = {
         "L": qrcode.constants.ERROR_CORRECT_L,
         "M": qrcode.constants.ERROR_CORRECT_M,
@@ -46,12 +48,16 @@ class QRCodeEngine:
         error_correction: str = "H",
         box_size: int = 10,
         border: int = 4,
+        shape_path: str | None = None,
     ) -> Image.Image:
         if not data:
             raise ValueError("data must not be empty")
 
-        if style not in self._STYLE_DRAWERS:
+        if style != self._CUSTOM_STYLE and style not in self._STYLE_DRAWERS:
             raise ValueError(f"unsupported style: {style}")
+
+        if style == self._CUSTOM_STYLE and not shape_path:
+            raise ValueError("custom style requires shape_path")
 
         if not 0.0 <= icon_size_ratio <= 0.3:
             raise ValueError("icon_size_ratio must be between 0.0 and 0.3")
@@ -78,12 +84,27 @@ class QRCodeEngine:
         qr.add_data(data)
         qr.make(fit=True)
 
-        drawer = self._STYLE_DRAWERS[style](box_size)
-        base = qr.make_image(
-            image_factory=StyledPilImage,
-            module_drawer=drawer,
+        if style == self._CUSTOM_STYLE:
+            image = self._render_custom_shape(
+                qr=qr,
+                shape_path=shape_path,
+                box_size=box_size,
+                border=border,
+            )
+        else:
+            drawer = self._STYLE_DRAWERS[style](box_size)
+            base = qr.make_image(
+                image_factory=StyledPilImage,
+                module_drawer=drawer,
+            )
+            image = base.get_image().convert("RGBA")
+
+        image = self._redraw_eyes(
+            image,
+            modules_count=qr.modules_count,
+            box_size=box_size,
+            border=border,
         )
-        image = base.get_image().convert("RGBA")
 
         fg_colors = self._parse_fg_colors(fg_color)
         bg_rgba = self._parse_color(bg_color)
@@ -107,6 +128,7 @@ class QRCodeEngine:
             "error_correction": level,
             "box_size": box_size,
             "border": border,
+            "shape_path": shape_path,
         }
         return image
 
@@ -124,6 +146,94 @@ class QRCodeEngine:
 
         svg_markup = self._image_to_svg(image)
         destination.write_text(svg_markup, encoding="utf-8")
+
+    def _render_custom_shape(
+        self,
+        qr,
+        shape_path: str,
+        box_size: int,
+        border: int,
+    ) -> Image.Image:
+        shape_source = Path(shape_path).expanduser()
+        if not shape_source.exists():
+            raise FileNotFoundError(f"shape not found: {shape_source}")
+
+        shape = Image.open(shape_source)
+        if shape.mode != "RGBA":
+            shape = shape.convert("RGBA")
+        if shape.getchannel("A").getextrema() == (255, 255):
+            raise ValueError("shape must be a PNG with a transparent background")
+
+        shape = shape.resize((box_size, box_size), Image.Resampling.LANCZOS)
+        stamp = Image.new("RGBA", (box_size, box_size))
+        stamp.putalpha(shape.getchannel("A"))
+
+        modules_count = qr.modules_count
+        total_size = (modules_count + 2 * border) * box_size
+        image = Image.new("RGBA", (total_size, total_size), (255, 255, 255, 255))
+
+        matrix = qr.get_matrix()
+        for r, row in enumerate(matrix):
+            y = r * box_size
+            for c, on in enumerate(row):
+                if on:
+                    x = c * box_size
+                    image.alpha_composite(stamp, (x, y))
+
+        return image
+
+    def _redraw_eyes(
+        self,
+        image: Image.Image,
+        modules_count: int,
+        box_size: int,
+        border: int,
+        corner_ratio: float = 0.25,
+    ) -> Image.Image:
+        result = image.copy()
+        draw = ImageDraw.Draw(result)
+
+        eye_modules = 7
+        eye_size_px = eye_modules * box_size
+        inner_dot_modules = 3
+        inner_dot_px = inner_dot_modules * box_size
+
+        outer_radius = int(eye_size_px * corner_ratio)
+        cutout_radius = max(0, outer_radius - box_size)
+        dot_radius = int(inner_dot_px * corner_ratio)
+
+        positions = (
+            (border, border),
+            (border + modules_count - eye_modules, border),
+            (border, border + modules_count - eye_modules),
+        )
+
+        for mx, my in positions:
+            x0 = mx * box_size
+            y0 = my * box_size
+            x1 = x0 + eye_size_px
+            y1 = y0 + eye_size_px
+
+            draw.rectangle((x0, y0, x1 - 1, y1 - 1), fill=(255, 255, 255, 255))
+            draw.rounded_rectangle(
+                (x0, y0, x1 - 1, y1 - 1),
+                radius=outer_radius,
+                fill=(0, 0, 0, 255),
+            )
+            draw.rounded_rectangle(
+                (x0 + box_size, y0 + box_size, x1 - box_size - 1, y1 - box_size - 1),
+                radius=cutout_radius,
+                fill=(255, 255, 255, 255),
+            )
+            dot_x0 = x0 + 2 * box_size
+            dot_y0 = y0 + 2 * box_size
+            draw.rounded_rectangle(
+                (dot_x0, dot_y0, dot_x0 + inner_dot_px - 1, dot_y0 + inner_dot_px - 1),
+                radius=dot_radius,
+                fill=(0, 0, 0, 255),
+            )
+
+        return result
 
     def _apply_colors(
         self,
