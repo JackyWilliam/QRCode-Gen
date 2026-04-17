@@ -50,12 +50,25 @@ icon = NSImage.alloc().initWithContentsOfFile_("Logo.png")
 NSWorkspace.sharedWorkspace().setIcon_forFile_options_(icon, "dist/QRCode Gen.pkg", 0)
 PYEOF
 
+# 组装分发包
+echo ">>> 组装分发包..."
+DIST_DIR="dist/QRCode Gen v${VERSION}"
+rm -rf "${DIST_DIR}"
+mkdir -p "${DIST_DIR}"
+cp "dist/QRCode Gen.pkg"        "${DIST_DIR}/"
+cp "fix_first_launch.command"   "${DIST_DIR}/如果无法打开 · If App Won't Open.command"
+cp "README.md"                  "${DIST_DIR}/"
+cp "READMECN.md"                "${DIST_DIR}/"
+
+# 压缩
+cd dist
+zip -r "QRCode Gen v${VERSION} macOS.zip" "QRCode Gen v${VERSION}" --quiet
+cd ..
+
 ARCH=$(uname -m)
 echo ""
 echo "✅ 打包完成"
-echo "   .app  → dist/QRCode Gen.app"
-echo "   .pkg  → dist/QRCode Gen.pkg  (发给别人用这个)"
+echo "   .pkg  → dist/QRCode Gen.pkg"
+echo "   .zip  → dist/QRCode Gen v${VERSION} macOS.zip"
 echo ""
 echo "   架构：${ARCH}"
-echo ""
-echo "   收到方双击 .pkg → 按提示安装 → 在 /Applications 找到 QRCode Gen"
