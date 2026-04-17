@@ -52,4 +52,4 @@ bash build.sh
 
 ## 许可证
 
-MIT License — Copyright © 2026 Yijie Ding
+MIT License
