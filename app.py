@@ -267,6 +267,15 @@ class App(ctk.CTk):
         self.title(t("app_title"))
         self.resizable(True, True)
         self.minsize(820, 600)
+        # 启动时按屏幕 85% 居中显示
+        self.update_idletasks()
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        w  = int(sw * 0.85)
+        h  = int(sh * 0.85)
+        x  = (sw - w) // 2
+        y  = (sh - h) // 2
+        self.geometry(f"{w}x{h}+{x}+{y}")
 
         self._engine = QRCodeEngine()
         self._icon_path: Optional[str] = None
@@ -282,11 +291,7 @@ class App(ctk.CTk):
         self._set_dock_icon()
         self._setup_about_menu()
         self._build_ui()
-        # 让 tkinter 完成布局计算，再按内容实际需求调整窗口大小
         self.update_idletasks()
-        req_w = max(self.winfo_reqwidth(),  820)
-        req_h = max(self.winfo_reqheight(), 600)
-        self.geometry(f"{req_w}x{req_h}")
         self._schedule_preview()
 
     # ── About 面板 ───────────────────────────────────────────────
@@ -610,7 +615,8 @@ class App(ctk.CTk):
         wrapper = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
         wrapper.grid(row=1, column=0, sticky="nsew", padx=24, pady=(8, 24))
 
-        self._canvas_frame = ctk.CTkFrame(wrapper, corner_radius=16, fg_color=_CARD)
+        self._canvas_frame = ctk.CTkFrame(wrapper, corner_radius=16, fg_color=_CARD,
+                                          width=400, height=400)
 
         self._preview_canvas = tk.Canvas(
             self._canvas_frame, bg="#18181b", highlightthickness=0)
@@ -738,7 +744,8 @@ class App(ctk.CTk):
         size = max(200, min(event.width, event.height))
         x = (event.width  - size) // 2
         y = (event.height - size) // 2
-        self._canvas_frame.place(x=x, y=y, width=size, height=size)
+        self._canvas_frame.configure(width=size, height=size)
+        self._canvas_frame.place(x=x, y=y)
 
     def _on_canvas_resize(self, _=None):
         if self._resize_id:
