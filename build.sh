@@ -22,7 +22,7 @@ pyinstaller \
   --hidden-import "PIL._tkinter_finder" \
   --hidden-import "qrcode.image.styledpil" \
   --hidden-import "qrcode.image.styles.moduledrawers.pil" \
-  --icon "Logo.png" \
+  --icon "Logo.icns" \
   app.py
 
 # 写入版本号和著作权到 Info.plist
