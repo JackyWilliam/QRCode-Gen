@@ -19,6 +19,7 @@ pyinstaller \
   --add-data "Logo.png:." \
   --add-data "i18n.py:." \
   --add-data "qr_engine.py:." \
+  --add-data "color_picker.py:." \
   --hidden-import "PIL._tkinter_finder" \
   --hidden-import "qrcode.image.styledpil" \
   --hidden-import "qrcode.image.styles.moduledrawers.pil" \

@@ -20,7 +20,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install qrcode[pil] Pillow customtkinter pyinstaller pyobjc-framework-Cocoa
+          pip install qrcode[pil] Pillow customtkinter numpy pyinstaller pyobjc-framework-Cocoa
           # Rebuild Pillow as universal2
           pip uninstall pillow -y
           ARCHFLAGS="-arch x86_64 -arch arm64" pip install --no-binary :all: pillow
@@ -42,6 +42,7 @@ jobs:
             --add-data "Logo.png:." \
             --add-data "i18n.py:." \
             --add-data "qr_engine.py:." \
+            --add-data "color_picker.py:." \
             --hidden-import "PIL._tkinter_finder" \
             --hidden-import "qrcode.image.styledpil" \
             --hidden-import "qrcode.image.styles.moduledrawers.pil" \
@@ -78,7 +79,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: pip install qrcode[pil] Pillow customtkinter pyinstaller
+        run: pip install qrcode[pil] Pillow customtkinter numpy pyinstaller
 
       - name: Get customtkinter path
         id: ctk
@@ -96,6 +97,7 @@ jobs:
             --add-data "Logo.png;." `
             --add-data "i18n.py;." `
             --add-data "qr_engine.py;." `
+            --add-data "color_picker.py;." `
             --hidden-import "PIL._tkinter_finder" `
             --hidden-import "qrcode.image.styledpil" `
             --hidden-import "qrcode.image.styles.moduledrawers.pil" `

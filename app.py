@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import threading
 import tkinter as tk
-import tkinter.colorchooser as colorchooser
 import tkinter.filedialog as filedialog
 import tkinter.messagebox as messagebox
 from pathlib import Path
@@ -13,13 +12,15 @@ from typing import Optional
 import customtkinter as ctk
 from PIL import Image, ImageDraw, ImageTk
 
+from color_picker import ColorTile
+
 from i18n import LANG, t
 from qr_engine import QRCodeEngine
 
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
-VERSION   = "1.1.1"
+VERSION   = "1.2.0"
 COPYRIGHT = "Copyright © 2026 Yijie Ding. MIT License."
 
 QUALITY_KEYS  = ["quality_low", "quality_medium", "quality_high", "quality_ultra"]
@@ -52,58 +53,6 @@ def _card(parent, **kw) -> ctk.CTkFrame:
 def _label(parent, text_key: str, size: int = 13, bold: bool = False, **kw) -> ctk.CTkLabel:
     font = ctk.CTkFont(size=size, weight="bold" if bold else "normal")
     return ctk.CTkLabel(parent, text=t(text_key), font=font, **kw)
-
-
-class ColorTile(ctk.CTkFrame):
-    """大色块，点击唤起颜色选择器。"""
-
-    def __init__(self, master, color: str, on_change, size: int = 44, **kw):
-        super().__init__(master, width=size, height=size,
-                         corner_radius=8, cursor="hand2", **kw)
-        self.pack_propagate(False)
-        self._color = color
-        self._on_change = on_change
-        self._size = size
-        self._canvas = tk.Canvas(self, width=size, height=size,
-                                  bd=0, highlightthickness=0)
-        self._canvas.pack(fill="both", expand=True)
-        self._canvas.bind("<Button-1>", lambda _: self._pick())
-        self._paint()
-
-    def _paint(self):
-        s = self._size
-        self._canvas.delete("all")
-        # 圆角矩形（用多边形近似）
-        r = 8
-        self._canvas.create_rectangle(r, 0, s - r, s, fill=self._color, outline="")
-        self._canvas.create_rectangle(0, r, s, s - r, fill=self._color, outline="")
-        self._canvas.create_oval(0, 0, r*2, r*2, fill=self._color, outline="")
-        self._canvas.create_oval(s-r*2, 0, s, r*2, fill=self._color, outline="")
-        self._canvas.create_oval(0, s-r*2, r*2, s, fill=self._color, outline="")
-        self._canvas.create_oval(s-r*2, s-r*2, s, s, fill=self._color, outline="")
-        # 细边框
-        self._canvas.configure(bg=self._color)
-
-    def _pick(self):
-        result = colorchooser.askcolor(color=self._color)
-        if result and result[1]:
-            self._color = result[1]
-            self._draw()
-            self._canvas.configure(bg=self._color)
-            self._on_change(self._color)
-
-    @property
-    def color(self) -> str:
-        return self._color
-
-    def set_color(self, c: str):
-        self._color = c
-        self._draw()
-        self._canvas.configure(bg=c)
-
-    def set_enabled(self, on: bool):
-        state = "hand2" if on else "arrow"
-        self._canvas.configure(cursor=state)
 
 
 # ─── 内容类型面板 ──────────────────────────────────────────────────────
@@ -820,6 +769,16 @@ class App(ctk.CTk):
 
     # ── 预览生成 ──────────────────────────────────────────────────
     def _schedule_preview(self, *_):
+        """合并同一时间段内的多次触发，最后一次后 120ms 才真正生成预览。"""
+        if self._debounce_id is not None:
+            try:
+                self.after_cancel(self._debounce_id)
+            except Exception:
+                pass
+        self._debounce_id = self.after(120, self._run_preview)
+
+    def _run_preview(self):
+        self._debounce_id = None
         threading.Thread(target=self._generate_preview, daemon=True).start()
 
     def _build_fg_color(self) -> str:
