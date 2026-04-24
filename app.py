@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import threading
 import tkinter as tk
 import tkinter.filedialog as filedialog
@@ -270,17 +271,29 @@ class App(ctk.CTk):
                 f"QRCode Gen  v{VERSION}\n\n{COPYRIGHT}",
             )
 
-    # ── Dock 图标 ────────────────────────────────────────────────
+    # ── 窗口/任务栏/Dock 图标 ────────────────────────────────────
     def _set_dock_icon(self):
         icon_path = Path(__file__).parent / "Logo.png"
+        if not icon_path.exists() and hasattr(sys, "_MEIPASS"):
+            candidate = Path(sys._MEIPASS) / "Logo.png"
+            if candidate.exists():
+                icon_path = candidate
         if not icon_path.exists():
             return
+        # 跨平台：iconphoto 设窗口/任务栏图标（Tk 8.6+，Win/Linux/macOS 都生效）
         try:
-            from AppKit import NSApplication, NSImage
-            img = NSImage.alloc().initWithContentsOfFile_(str(icon_path))
-            NSApplication.sharedApplication().setApplicationIconImage_(img)
+            self._icon_photo = ImageTk.PhotoImage(Image.open(icon_path))
+            self.iconphoto(True, self._icon_photo)
         except Exception:
             pass
+        # macOS 额外：设置 Dock 图标（AppKit 仅 macOS 可用）
+        if sys.platform == "darwin":
+            try:
+                from AppKit import NSApplication, NSImage
+                img = NSImage.alloc().initWithContentsOfFile_(str(icon_path))
+                NSApplication.sharedApplication().setApplicationIconImage_(img)
+            except Exception:
+                pass
 
     # ── 骨架 ─────────────────────────────────────────────────────
     def _build_ui(self):
@@ -311,6 +324,13 @@ class App(ctk.CTk):
             font=ctk.CTkFont(size=18, weight="bold"),
             anchor="w",
         ).pack(side="left", fill="y")
+        ctk.CTkButton(
+            header, text="ⓘ", width=28, height=28, corner_radius=14,
+            fg_color="transparent", hover_color=("gray80", "#3a3a3a"),
+            text_color=("gray40", "gray70"),
+            font=ctk.CTkFont(size=16),
+            command=self._show_about,
+        ).pack(side="right")
 
         # 分割线
         ctk.CTkFrame(sidebar, height=1, fg_color=("gray80", "#383838")).pack(

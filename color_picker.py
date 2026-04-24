@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import colorsys
 import json
+import os
+import sys
 import tkinter as tk
 from pathlib import Path
 from typing import Callable, Optional
@@ -31,9 +33,28 @@ __all__ = [
 ]
 
 
-_RECENT_DIR = Path.home() / "Library/Application Support/QRCodeGen"
+def _user_data_dir() -> Path:
+    if sys.platform == "darwin":
+        return Path.home() / "Library/Application Support/QRCodeGen"
+    if sys.platform == "win32":
+        base = os.environ.get("APPDATA") or str(Path.home() / "AppData/Roaming")
+        return Path(base) / "QRCodeGen"
+    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    return Path(base) / "QRCodeGen"
+
+
+def _mono_font_family() -> str:
+    if sys.platform == "darwin":
+        return "Menlo"
+    if sys.platform == "win32":
+        return "Consolas"
+    return "DejaVu Sans Mono"
+
+
+_RECENT_DIR = _user_data_dir()
 _RECENT_FILE = _RECENT_DIR / "recent_colors.json"
 _RECENT_MAX = 10
+_MONO_FAMILY = _mono_font_family()
 
 _CB_DARK = (204, 204, 204)
 _CB_LIGHT = (255, 255, 255)
@@ -221,7 +242,6 @@ class ColorPicker(ctk.CTkToplevel):
         self.bind("<Escape>", lambda _e: self._cancel())
         self.bind("<Return>", lambda _e: self._confirm())
         self.protocol("WM_DELETE_WINDOW", self._confirm)
-        self.bind("<FocusOut>", self._on_focus_out)
         self.after(80, self._grab_focus)
 
     # ─── 布局 ───────────────────────────────────────────────
@@ -287,7 +307,7 @@ class ColorPicker(ctk.CTkToplevel):
             width=120,
             height=24,
             corner_radius=5,
-            font=ctk.CTkFont(family="Menlo", size=11),
+            font=ctk.CTkFont(family=_MONO_FAMILY, size=11),
         )
         self._hex_entry.pack(side="left")
         self._hex_entry.bind("<Return>", lambda _e: self._commit_hex())
@@ -579,23 +599,6 @@ class ColorPicker(ctk.CTkToplevel):
             self.focus_force()
         except Exception:
             pass
-
-    def _on_focus_out(self, _event):
-        # 若新焦点仍在本窗口内（子控件），忽略
-        try:
-            focused = self.focus_displayof()
-        except Exception:
-            focused = None
-        if focused is None:
-            return
-        top = None
-        try:
-            top = focused.winfo_toplevel()
-        except Exception:
-            pass
-        if top is self:
-            return
-        self._confirm()
 
     def _confirm(self):
         final = self._current_hex()
