@@ -53,10 +53,13 @@ jobs:
         run: |
           APP_PLIST="dist/QRCode Gen.app/Contents/Info.plist"
           VERSION=$(python -c "import re; print(re.search(r'VERSION\s*=\s*\"([^\"]+)\"', open('app.py').read()).group(1))")
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" "${APP_PLIST}"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${VERSION}" "${APP_PLIST}"
-          /usr/libexec/PlistBuddy -c "Add :NSHumanReadableCopyright string 'Copyright © 2026 Yijie Ding. MIT License.'" "${APP_PLIST}" 2>/dev/null \
-            || /usr/libexec/PlistBuddy -c "Set :NSHumanReadableCopyright 'Copyright © 2026 Yijie Ding. MIT License.'" "${APP_PLIST}"
+          plist_set() {
+            /usr/libexec/PlistBuddy -c "Set $1 $2" "${APP_PLIST}" 2>/dev/null \
+              || /usr/libexec/PlistBuddy -c "Add $1 string $2" "${APP_PLIST}"
+          }
+          plist_set ":CFBundleShortVersionString" "${VERSION}"
+          plist_set ":CFBundleVersion"           "${VERSION}"
+          plist_set ":NSHumanReadableCopyright"  "Copyright © 2026 Yijie Ding. MIT License."
 
       - name: Create zip
         run: cd dist && zip -r "QRCode Gen-mac-universal2.zip" "QRCode Gen.app" --quiet
