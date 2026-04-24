@@ -1,5 +1,7 @@
 build/
 dist/
+dist-release/
+installer_build/
 __pycache__/
 *.spec
 *.pyc
