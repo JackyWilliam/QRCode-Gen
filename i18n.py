@@ -3,6 +3,7 @@
 from __future__ import annotations
 import locale
 import subprocess
+import sys
 
 _STRINGS: dict[str, dict[str, str]] = {
     # ── 通用 ──────────────────────────────────────────────────────
@@ -109,26 +110,32 @@ _STRINGS: dict[str, dict[str, str]] = {
     "vcard_email":        {"zh": "邮件",               "en": "Email"},
     "vcard_org":          {"zh": "公司",               "en": "Company"},
     "vcard_url":          {"zh": "网址",               "en": "URL"},
+
+    # ── Color picker ──────────────────────────────────────────────
+    "cp_title":           {"zh": "颜色",               "en": "Color"},
+    "cp_cancel":          {"zh": "取消",               "en": "Cancel"},
+    "cp_confirm":         {"zh": "完成",               "en": "Done"},
 }
 
 
 def _detect_lang() -> str:
     """检测系统语言，返回 'zh' 或 'en'。"""
-    # macOS: 读取 AppleLanguages 偏好设置
-    try:
-        out = subprocess.run(
-            ["defaults", "read", "-g", "AppleLanguages"],
-            capture_output=True, text=True, timeout=2,
-        ).stdout
-        # 只取第一个语言项，避免次选语言干扰判断
-        for token in out.split('"'):
-            token = token.strip()
-            if token and not token.startswith("(") and not token.startswith(","):
-                return "zh" if token.lower().startswith("zh") else "en"
-    except Exception:
-        pass
+    # macOS: 读取 AppleLanguages 偏好设置（仅 darwin 平台调 subprocess）
+    if sys.platform == "darwin":
+        try:
+            out = subprocess.run(
+                ["defaults", "read", "-g", "AppleLanguages"],
+                capture_output=True, text=True, timeout=2,
+            ).stdout
+            # 只取第一个语言项，避免次选语言干扰判断
+            for token in out.split('"'):
+                token = token.strip()
+                if token and not token.startswith("(") and not token.startswith(","):
+                    return "zh" if token.lower().startswith("zh") else "en"
+        except Exception:
+            pass
 
-    # 通用 fallback: locale
+    # 通用 fallback: locale（Windows / Linux 直接走这里）
     try:
         code = locale.getdefaultlocale()[0] or ""
         if code.lower().startswith("zh"):

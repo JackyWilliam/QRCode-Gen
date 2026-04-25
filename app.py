@@ -21,7 +21,7 @@ from qr_engine import QRCodeEngine
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
-VERSION   = "1.2.1"
+VERSION   = "1.2.2"
 COPYRIGHT = "Copyright © 2026 Yijie Ding. MIT License."
 
 QUALITY_KEYS  = ["quality_low", "quality_medium", "quality_high", "quality_ultra"]

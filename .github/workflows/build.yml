@@ -20,7 +20,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install qrcode[pil] Pillow customtkinter numpy pyinstaller pyobjc-framework-Cocoa
+          pip install qrcode[pil] Pillow customtkinter pyinstaller pyobjc-framework-Cocoa
           # Rebuild Pillow as universal2
           pip uninstall pillow -y
           ARCHFLAGS="-arch x86_64 -arch arm64" pip install --no-binary :all: pillow
@@ -82,7 +82,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: pip install qrcode[pil] Pillow customtkinter numpy pyinstaller
+        run: pip install qrcode[pil] Pillow customtkinter pyinstaller
 
       - name: Get customtkinter path
         id: ctk

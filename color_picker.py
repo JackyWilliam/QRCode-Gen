@@ -20,8 +20,9 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import customtkinter as ctk
-import numpy as np
 from PIL import Image, ImageDraw, ImageTk
+
+from i18n import t
 
 
 __all__ = [
@@ -88,46 +89,69 @@ def format_hex(r: int, g: int, b: int, a: int = 255) -> str:
 # ─── 图像生成 ───────────────────────────────────────────────────────
 
 def _checkerboard(w: int, h: int, cell: int = 6) -> Image.Image:
-    xs = np.arange(w) // cell
-    ys = np.arange(h) // cell
-    grid = (xs[None, :] + ys[:, None]) % 2
-    img = np.where(
-        grid[..., None] == 0,
-        np.array(_CB_LIGHT, dtype=np.uint8),
-        np.array(_CB_DARK, dtype=np.uint8),
-    )
-    return Image.fromarray(img.astype(np.uint8), mode="RGB")
+    img = Image.new("RGB", (w, h), _CB_LIGHT)
+    draw = ImageDraw.Draw(img)
+    for yi, y in enumerate(range(0, h, cell)):
+        y2 = min(y + cell, h) - 1
+        for xi, x in enumerate(range(0, w, cell)):
+            if (xi + yi) & 1:
+                draw.rectangle((x, y, min(x + cell, w) - 1, y2), fill=_CB_DARK)
+    return img
+
+
+def _h_alpha_gradient_mask(w: int, h: int) -> Image.Image:
+    """横向 0→255 的 alpha 灰度 mask（L 模式），高度 h。"""
+    if w <= 1:
+        return Image.new("L", (w, h), 255)
+    row = bytes(min(255, max(0, round(x * 255 / (w - 1)))) for x in range(w))
+    one_row = Image.frombytes("L", (w, 1), row)
+    return one_row.resize((w, h), Image.NEAREST)
 
 
 def _sv_image(hue: float, size: int) -> Image.Image:
+    """饱和度×明度方块。横向：白→hue_rgb；纵向：顶 v=1 → 底 v=0。"""
     r_h, g_h, b_h = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
-    hue_rgb = np.array([r_h, g_h, b_h], dtype=np.float32)
-    white = np.array([1.0, 1.0, 1.0], dtype=np.float32)
-    s = np.linspace(0.0, 1.0, size, dtype=np.float32)[None, :, None]
-    v = np.linspace(1.0, 0.0, size, dtype=np.float32)[:, None, None]
-    color = (1.0 - s) * white + s * hue_rgb
-    color = color * v
-    return Image.fromarray((color * 255.0).astype(np.uint8), mode="RGB")
+    r255, g255, b255 = int(r_h * 255), int(g_h * 255), int(b_h * 255)
+    # 横向渐变：白 → hue_rgb
+    row = Image.new("RGB", (size, 1))
+    px = row.load()
+    if size == 1:
+        px[0, 0] = (r255, g255, b255)
+    else:
+        for x in range(size):
+            t_s = x / (size - 1)
+            px[x, 0] = (
+                int(255 * (1 - t_s) + r255 * t_s),
+                int(255 * (1 - t_s) + g255 * t_s),
+                int(255 * (1 - t_s) + b255 * t_s),
+            )
+    base = row.resize((size, size), Image.NEAREST)
+    # 纵向明度衰减：顶 v=1 (mask=255) → 底 v=0 (mask=0)
+    col_bytes = bytes(
+        int(255 * (1 - y / (size - 1))) if size > 1 else 255
+        for y in range(size)
+    )
+    col = Image.frombytes("L", (1, size), col_bytes)
+    value_mask = col.resize((size, size), Image.NEAREST)
+    black = Image.new("RGB", (size, size), (0, 0, 0))
+    return Image.composite(base, black, value_mask)
 
 
 def _hue_strip(w: int, h: int) -> Image.Image:
-    hues = np.linspace(0.0, 1.0, w, dtype=np.float32)
-    arr = np.zeros((h, w, 3), dtype=np.uint8)
-    for x, hue in enumerate(hues):
-        r, g, b = colorsys.hsv_to_rgb(float(hue), 1.0, 1.0)
-        arr[:, x, 0] = int(r * 255)
-        arr[:, x, 1] = int(g * 255)
-        arr[:, x, 2] = int(b * 255)
-    return Image.fromarray(arr, mode="RGB")
+    """色相条：每列一个 hue（0→1）。"""
+    row = Image.new("RGB", (w, 1))
+    px = row.load()
+    for x in range(w):
+        hue = x / (w - 1) if w > 1 else 0.0
+        r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+        px[x, 0] = (int(r * 255), int(g * 255), int(b * 255))
+    return row.resize((w, h), Image.NEAREST)
 
 
 def _alpha_strip(rgb: tuple[int, int, int], w: int, h: int) -> Image.Image:
     cb = _checkerboard(w, h, cell=max(4, h // 3))
-    alpha_grad = np.tile(
-        np.linspace(0, 255, w, dtype=np.uint8)[None, :], (h, 1)
-    )
     overlay = Image.new("RGBA", (w, h), (*rgb, 255))
-    overlay.putalpha(Image.fromarray(alpha_grad, mode="L"))
+    overlay.putalpha(_h_alpha_gradient_mask(w, h))
     cb_rgba = cb.convert("RGBA")
     cb_rgba.alpha_composite(overlay)
     return cb_rgba.convert("RGB")
@@ -204,10 +228,10 @@ class ColorPicker(ctk.CTkToplevel):
         initial: str,
         on_change: Callable[[str], None],
         anchor_widget=None,
-        title: str = "颜色",
+        title: Optional[str] = None,
     ):
         super().__init__(parent)
-        self.title(title)
+        self.title(title if title is not None else t("cp_title"))
         self.resizable(False, False)
         self.configure(fg_color="#1e1e1e")
         try:
@@ -350,7 +374,7 @@ class ColorPicker(ctk.CTkToplevel):
         btn_row.columnconfigure((0, 1), weight=1)
         ctk.CTkButton(
             btn_row,
-            text="取消",
+            text=t("cp_cancel"),
             width=80,
             height=24,
             corner_radius=5,
@@ -361,7 +385,7 @@ class ColorPicker(ctk.CTkToplevel):
         ).grid(row=0, column=0, padx=(0, 4), sticky="ew")
         ctk.CTkButton(
             btn_row,
-            text="完成",
+            text=t("cp_confirm"),
             width=80,
             height=24,
             corner_radius=5,
@@ -444,12 +468,8 @@ class ColorPicker(ctk.CTkToplevel):
                 self.STRIP_W, self.STRIP_H, cell=max(4, self.STRIP_H // 3)
             ).convert("RGBA")
         base = self._alpha_cb_cache.copy()
-        alpha_grad = np.tile(
-            np.linspace(0, 255, self.STRIP_W, dtype=np.uint8)[None, :],
-            (self.STRIP_H, 1),
-        )
         overlay = Image.new("RGBA", (self.STRIP_W, self.STRIP_H), (r, g, b, 255))
-        overlay.putalpha(Image.fromarray(alpha_grad, mode="L"))
+        overlay.putalpha(_h_alpha_gradient_mask(self.STRIP_W, self.STRIP_H))
         base.alpha_composite(overlay)
         self._alpha_photo = ImageTk.PhotoImage(base)
         self._alpha_canvas.delete("all")
@@ -631,7 +651,7 @@ class ColorTile(ctk.CTkFrame):
         on_change: Callable[[str], None],
         size: int = 44,
         corner_radius: int = 8,
-        title: str = "颜色",
+        title: Optional[str] = None,
         **kw,
     ):
         super().__init__(

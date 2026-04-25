@@ -1,6 +1,5 @@
 qrcode[pil]>=7.4
 Pillow>=10.0
 customtkinter>=5.2
-numpy>=1.24
 pyinstaller>=6.0
-pyobjc-framework-Cocoa>=9.0
+pyobjc-framework-Cocoa>=9.0; sys_platform == "darwin"
